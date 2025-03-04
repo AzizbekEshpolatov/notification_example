@@ -188,7 +188,7 @@ class NotificationService {
   }
 
   Future<void> scheduleNotification() async {
-    await Future.delayed(Duration(minutes: 1)); // 1 daqiqa kutish
+    await Future.delayed(Duration(minutes: 1));
     await AwesomeNotifications().createNotification(
       content: NotificationContent(
         id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
