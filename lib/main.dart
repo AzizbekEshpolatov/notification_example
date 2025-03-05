@@ -5,14 +5,42 @@ import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 
+class MyFirebaseMessagingService {
+  static Future<void> handleBackgroundMessage(RemoteMessage message) async {
+    debugPrint(
+      "📌 BACKGROUND yoki TERMINATE holatida keldi: ${message.notification?.title} - ${message.notification?.body}",
+    );
+    if (message.notification != null) {
+      await AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+          channelKey: 'high_importance_channel',
+          title: message.notification?.title ?? "New Notification",
+          body: message.notification?.body ?? "You have a new message.",
+          displayOnBackground: true,
+        ),
+      );
+    }
+  }
+}
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  FirebaseMessaging.onBackgroundMessage(
-    firebaseMessagingBackgroundHandler,
-  ); // Background listener
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await FirebaseService.initialize();
+
+  FirebaseMessaging.onBackgroundMessage(
+    MyFirebaseMessagingService.handleBackgroundMessage,
+  );
+
+  FirebaseMessaging.instance.getInitialMessage().then((message) {
+    if (message != null) {
+      debugPrint("📌 TERMINATE holatida kelgan xabar: ${message.notification?.title} - ${message.notification?.body}");
+      MyFirebaseMessagingService.handleBackgroundMessage(message);
+    } else {
+      debugPrint("❌ TERMINATE holatda hech qanday xabar kelmadi.");
+    }
+  });
+
   final notificationService = NotificationService();
   await notificationService.initialize();
 
@@ -53,13 +81,6 @@ class MyApp extends StatelessWidget {
                 },
                 child: Text("Send Scheduled Notification"),
               ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
-                  await scheduleNotification(); // 1 daqiqa keyin notification chiqadi
-                },
-                child: Text("Send Scheduled Notification"),
-              ),
             ],
           ),
         ),
@@ -69,26 +90,8 @@ class MyApp extends StatelessWidget {
   }
 }
 
-Future<void> scheduleNotification() async {
-  await AwesomeNotifications().createNotification(
-    content: NotificationContent(
-      id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
-      channelKey: 'high_importance_channel',
-      title: 'Scheduled Notification',
-      body: 'This notification was scheduled to appear after 1 minute.',
-    ),
-    schedule: NotificationCalendar(
-      second: DateTime.now().second, // Joriy soniyani olamiz
-      minute: DateTime.now().minute + 1, // 1 daqiqa keyin
-      repeats: false, // Bir martalik notification
-      preciseAlarm: true, // Android uchun aniq vaqtni ta'minlaydi
-    ),
-  );
-}
-
 class FirebaseService {
   static Future<void> initialize() async {
-    await Firebase.initializeApp();
     await FirebaseMessaging.instance
         .setForegroundNotificationPresentationOptions(
           alert: true,
@@ -99,7 +102,6 @@ class FirebaseService {
   }
 
   static Future<void> _requestPermission() async {
-    /// permission olyabmiz ilovada!
     final settings = await FirebaseMessaging.instance.requestPermission(
       alert: true,
       badge: true,
@@ -116,12 +118,8 @@ class NotificationService {
 
   NotificationService._internal();
 
-  StreamSubscription? _messageSubscription;
-  StreamSubscription? _openAppSubscription;
-
   Future<void> initialize() async {
     await _initializeAwesomeNotifications();
-    _setupMessageListeners();
   }
 
   Future<void> _initializeAwesomeNotifications() async {
@@ -138,36 +136,6 @@ class NotificationService {
         playSound: true,
       ),
     ]);
-  }
-
-  void _setupMessageListeners() {
-    _messageSubscription = FirebaseMessaging.onMessage.listen(
-      _handleForegroundMessage,
-    );
-    _openAppSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
-      _handleAppOpened,
-    );
-  }
-
-  Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    final notification = message.notification;
-    if (notification == null) return;
-
-    await AwesomeNotifications().createNotification(
-      content: NotificationContent(
-        id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
-        channelKey: 'high_importance_channel',
-        title: notification.title,
-        body: notification.body,
-        payload: message.data.cast<String, String?>(),
-        displayOnForeground: true,
-        displayOnBackground: false,
-      ),
-    );
-  }
-
-  void _handleAppOpened(RemoteMessage message) {
-    debugPrint('App opened from notification: ${message.data}');
   }
 
   Future<String> getToken() async {
@@ -221,7 +189,6 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       channelKey: 'high_importance_channel',
       title: notification.title,
       body: notification.body,
-      payload: message.data.cast<String, String?>(),
       displayOnForeground: false,
       displayOnBackground: true,
     ),
